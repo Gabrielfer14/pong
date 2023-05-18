@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PONG
+  </title>
+  <style>
+    canvas {
+      display: block;
+      margin: 0 auto;
+      background-color: black;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="gameCanvas" width="800" height="600"></canvas>
+  <script src="/socket.io/socket.io.js"></script>
+
+  <script >
+    let side = null;
+    
+    function chooseSide() {
+      const input = prompt('Choose your side (left or right):');
+      if (input === 'left' || input === 'right') {
+        side = input;
+      } else {
+        alert('Invalid choice. Please choose "left" or "right".');
+        chooseSide();
+      }
+    }
+    
+    chooseSide();
+
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const socket = io();
+
+    const paddleHeight = 100;
+    const paddleWidth = 10;
+
+    let leftPaddleY = (canvas.height - paddleHeight) / 2;
+    let rightPaddleY = (canvas.height - paddleHeight) / 2;
+
+    ballx = canvas.width/2;
+    bally = canvas.height/2;
+    xvel = yvel = -3;
+    bd = 10;
+    score1 = score2 = 0;
+
+    socket.on('updatePaddle', (data) => {
+      if (data.player === 'left') {
+        leftPaddleY = data.y;
+      } else {
+        rightPaddleY = data.y;
+      }
+    });
+
+    socket.on('updateBall', (data1) => {
+      ballx = data1.x;
+      bally = data1.y;
+    });
+
+    socket.on('updateScore', (data2) => {
+      score1 = data2.x;
+      score2 = data2.y;
+    });
+
+    canvas.addEventListener('mousemove', (event) => {
+      const mouseY = event.clientY - canvas.getBoundingClientRect().top;
+      if (side === 'left') {
+        leftPaddleY = mouseY - paddleHeight / 2;
+      } else {
+        rightPaddleY = mouseY - paddleHeight / 2;
+      }
+      socket.emit('updatePaddle', { player: side, y: mouseY - paddleHeight / 2 });
+    });
+
+    function draw() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      // Desenhar paddles
+      
+      ctx.fillStyle = 'white';
+      ctx.fillRect(0, leftPaddleY, paddleWidth, paddleHeight);
+      ctx.fillRect(canvas.width - paddleWidth, rightPaddleY, paddleWidth, paddleHeight);
+
+      // Desenha a "bola"(quadradinho)
+
+      ctx.fillRect(ballx-bd/2, bally-bd/2, bd, bd);
+
+      // Mostrar os scores
+
+      ctx.fillText(score1,100,100);
+      ctx.fillText(score2,canvas.width-100,100);
+
+      requestAnimationFrame(draw);
+    }
+
+    function reset() { //Função para resetar a "bola" ao meio do campo
+      ballx = canvas.width/2;
+      bally = canvas.height/2;
+      xvel = -xvel;
+      yvel = 3;
+    }
+
+    function fimdeJogo() {
+     const input = prompt('Gostaria de jogar novamente?');
+     if(input === 'yes'){
+      score1 = score2 = 0;
+      reset();
+     }
+     else if(input === 'no'){
+      cancelAnimationFrame(animationId);
+     }
+     else{
+      alert('Invalid choice. Please choose "yes" or "no".');
+      fimdeJogo();
+     }
+    }
+  
+    function update() { //Função para atualizar a posição da "bola" pelo campo
+      ballx += xvel;
+      bally += yvel;
+
+      if (bally < 0 && yvel < 0) {
+        yvel = -yvel;
+      }
+      if (bally > canvas.height && yvel > 0) {
+        yvel = -yvel;
+      }
+
+      // Condicional caso a bola bata na raquete esquerda e caso passe marque o ponto e reseta a bola
+      if (ballx < 0) {
+        if (bally > leftPaddleY && bally < leftPaddleY + paddleHeight) {
+          xvel = -xvel;
+          deltaY = bally - (leftPaddleY + paddleHeight/2);
+          yvel = deltaY*0.3;
+        } 
+        else {
+          score2 ++;
+          if(score2 == 10){
+            window.alert('Jogador 2 venceu!');
+            fimdeJogo();
+          }
+          else{
+            reset();
+          };
+        }
+      }
+
+      // Condicional caso a bola bata na raquete direita e caso passe marque o ponto e reseta a bola
+      if (ballx > canvas.width) {
+        if (bally > rightPaddleY && bally < rightPaddleY + paddleHeight) {
+          xvel = -xvel;
+          deltaY = bally - (rightPaddleY + paddleHeight/2);
+          yvel = deltaY*0.3;
+        }else {
+          score1 +=1;
+          if(score1 == 10){
+            window.alert('Jogador 1 venceu!');
+            fimdeJogo();
+          }
+          else{
+            reset();
+          };
+        }
+      } 
+      requestAnimationFrame(update);
+      socket.emit('updateScore', { x: score1, y: score2});
+      socket.emit('updateBall', { x: ballx, y: bally});
+    }  
+    
+    requestAnimationFrame(update);
+    draw();
+
+  </script>
+</body>
+</html>
